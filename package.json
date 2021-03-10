@@ -1,0 +1,28 @@
+{
+  "name": "stock-trading",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lucky-Bansal/stock-trading.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Lucky-Bansal/stock-trading/issues"
+  },
+  "homepage": "https://github.com/Lucky-Bansal/stock-trading#readme",
+  "dependencies": {
+    "bluebird": "^3.7.2",
+    "express": "^4.17.1",
+    "joi": "6.10.1",
+    "moment": "^2.29.1",
+    "body-parser": "1.11.0",
+    "underscore": "^1.12.0",
+    "mongodb": "2.2.19"
+  }
+}
