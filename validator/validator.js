@@ -71,8 +71,8 @@ function deleteTrade(req, res, next) {
     }
     let schema = Joi.object().keys({
         quantity        : Joi.number().integer().min(1).positive().required(),
-        security_code   : Joi.string().required(),
-        transaction_code: Joi.number().required()
+        security_code   : Joi.string().optional(),
+        transaction_code: Joi.string().required()
     });
 
     let validFields = validateFields(req['body'], res, schema, apiReference);

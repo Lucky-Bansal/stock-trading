@@ -206,16 +206,16 @@ async function deleteTrade(req, res) {
             return responses.sendCustomResponse(res, constants.responseMessageCode.TRANSACTION_NOT_FOUND, constants.responseFlags.NO_DATA_FOUND, transaction, apiReference);
         }
 
-        if(transaction[0].trade_type == constants.TRADE_TYPE.BUY){
+        if(transaction.value.trade_type == constants.TRADE_TYPE.BUY){
 
-            shares_worth_change = transaction[0].trade_price * transaction[0].quantity;
+            shares_worth_change = transaction.value.trade_price * transaction.value.quantity;
             
-            if(portfolioResult[0].current_quantity < transaction[0].quantity){
+            if(portfolioResult[0].current_quantity < transaction.value.quantity){
                 return responses.sendCustomResponse(res, constants.responseMessageCode.NOT_ENOUGH_STOCKS, constants.responseFlags.SHOW_ERROR_MESSAGE, transaction, apiReference);
             }
-            shares_change = portfolioResult[0].current_quantity - transaction[0].quantity;
+            shares_change = portfolioResult[0].current_quantity - transaction.value.quantity;
         } else {
-            shares_change = portfolioResult[0].current_quantity + transaction[0].quantity;
+            shares_change = portfolioResult[0].current_quantity + transaction.value.quantity;
         }
 
         if(portfolioResult[0].average_price * portfolioResult[0].current_quantity  < shares_worth_change){
