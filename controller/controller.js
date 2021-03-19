@@ -29,6 +29,7 @@ async function portfolio(req, res) {
 
         let fetchObj = { is_deleted: 0 }
 
+        // If portfolio details is required for a perticular security
         if (req.query.security_code) {
             fetchObj["_id"] = new ObjectID(req.query.security_code);
         }
@@ -52,6 +53,7 @@ async function trades(req, res) {
         let skip = Number(req.query.skip) || 0;
 
 
+        // Get trade history
         let cursor = db.collection(constants.mongoCollections.TRADE_HISTORY).aggregate([
             {
                 "$project": {
@@ -129,6 +131,7 @@ async function postTrade(req, res) {
         let trade_type = req.body.trade_type;
         let quantity = req.body.quantity;
 
+        // Check of security exists or not
         let portfolioResult = await mongo.find(apiReference, constants.mongoCollections.PORTFOLIOS, { "_id": new ObjectID(security_code.toString().trim()), is_deleted: 0 }, 1, 0);
         if (_.isEmpty(portfolioResult)) {
             return responses.sendCustomResponse(res, constants.responseMessageCode.NO_DATA_FOUND, constants.responseFlags.NO_DATA_FOUND, portfolioResult, apiReference);
@@ -137,16 +140,16 @@ async function postTrade(req, res) {
         let stock_current_price = portfolioResult[0].average_price;
         let stock_current_quantity = portfolioResult[0].current_quantity;
 
-        let stock_price = constants.STOCK_PRICE;
+        let stock_price = constants.STOCK_PRICE;                    // Default Stock price was mentioned in the assignment
         let new_average = ((stock_current_price * stock_current_quantity) + (quantity * stock_price)) / (stock_current_quantity + quantity);
 
         if (trade_type == constants.TRADE_TYPE.SELL) {
-            if (stock_current_quantity < quantity) {
+            if (stock_current_quantity < quantity) {                // Check if we have enough stocks to sell
                 return responses.sendCustomResponse(res, constants.responseMessageCode.NOT_ENOUGH_STOCKS, constants.responseFlags.SHOW_ERROR_MESSAGE, {}, apiReference)
             }
             new_average = stock_current_price;
         }
-        new_average = Number(new_average.toFixed(2));
+        new_average = Number(new_average.toFixed(2));               // Add decimal precision upto 2 decimal numbers
         let insertObj = {
             security_code,
             trade_type,
@@ -162,8 +165,11 @@ async function postTrade(req, res) {
         if (trade_type == constants.TRADE_TYPE.SELL) {
             insertObj.new_quantity = Number(stock_current_quantity - quantity);
         }
+
+        // add transaction logs
         await mongo.insert(apiReference, constants.mongoCollections.TRADE_HISTORY, insertObj);
 
+        // Update portfolio after transaction
         await mongo.update(apiReference, constants.mongoCollections.PORTFOLIOS, { "_id": new ObjectID(security_code.toString().trim()) },
             { average_price: new_average, current_quantity: insertObj.new_quantity }, true);
 
@@ -188,6 +194,7 @@ async function deleteTrade(req, res) {
         let shares_worth_change = 0;
         let shares_change = 0
 
+        // converting security code to Mongo ObjectId type and checking if portfolio exists or not
         security_code = new ObjectID(security_code.toString().trim());
         let portfolioResult = await mongo.find(apiReference, constants.mongoCollections.PORTFOLIOS, { "_id": security_code, is_deleted: 0 }, 1, 0);
 
@@ -195,6 +202,31 @@ async function deleteTrade(req, res) {
             return responses.sendCustomResponse(res, constants.responseMessageCode.PORTFOLIO_NOT_FOUND, constants.responseFlags.NO_DATA_FOUND, portfolioResult, apiReference);
         }
 
+        let transactionDetails = await mongo.find(apiReference, constants.mongoCollections.PORTFOLIOS, { "_id": new ObjectID(transaction_code.toString().trim()), is_deleted: 0 }, 1, 0);
+
+        if (_.isEmpty(transactionDetails)) {
+            return responses.sendCustomResponse(res, constants.responseMessageCode.TRANSACTION_NOT_FOUND, constants.responseFlags.NO_DATA_FOUND, transaction, apiReference);
+        }
+
+        // check if the transaction was for sell or for buy
+        if(transactionDetails[0].trade_type == constants.TRADE_TYPE.BUY){
+            shares_worth_change = transaction.value.trade_price * transaction.value.quantity;
+
+            // Checking if we have enough stocks to remove after transaction deletion 
+            if(portfolioResult[0].current_quantity < transactionDetails[0].quantity){
+                return responses.sendCustomResponse(res, constants.responseMessageCode.NOT_ENOUGH_STOCKS, constants.responseFlags.SHOW_ERROR_MESSAGE, transaction, apiReference);
+            }
+            shares_change = portfolioResult[0].current_quantity - transaction.value.quantity;
+
+        } else {
+            shares_change = portfolioResult[0].current_quantity + transaction.value.quantity;
+        }
+        
+        if(portfolioResult[0].average_price * portfolioResult[0].current_quantity  < shares_worth_change){
+            return responses.sendCustomResponse(res, constants.responseMessageCode.NOT_ENOUGH_STOCKS, constants.responseFlags.SHOW_ERROR_MESSAGE, transaction, apiReference);
+        }
+
+        // Set is_deleted flag the transaction to 1 and fetching transaction details at the same time
         let transaction = await mongo.findAndModify(apiReference, constants.mongoCollections.TRADE_HISTORY, {
             condition: { "_id": new ObjectID(transaction_code.toString().trim()) },
             sort: [],
@@ -202,26 +234,7 @@ async function deleteTrade(req, res) {
             extras: { new: false, remove: false }
         });
 
-        if (_.isEmpty(transaction)) {
-            return responses.sendCustomResponse(res, constants.responseMessageCode.TRANSACTION_NOT_FOUND, constants.responseFlags.NO_DATA_FOUND, transaction, apiReference);
-        }
-
-        if(transaction.value.trade_type == constants.TRADE_TYPE.BUY){
-
-            shares_worth_change = transaction.value.trade_price * transaction.value.quantity;
-            
-            if(portfolioResult[0].current_quantity < transaction.value.quantity){
-                return responses.sendCustomResponse(res, constants.responseMessageCode.NOT_ENOUGH_STOCKS, constants.responseFlags.SHOW_ERROR_MESSAGE, transaction, apiReference);
-            }
-            shares_change = portfolioResult[0].current_quantity - transaction.value.quantity;
-        } else {
-            shares_change = portfolioResult[0].current_quantity + transaction.value.quantity;
-        }
-
-        if(portfolioResult[0].average_price * portfolioResult[0].current_quantity  < shares_worth_change){
-            return responses.sendCustomResponse(res, constants.responseMessageCode.NOT_ENOUGH_STOCKS, constants.responseFlags.SHOW_ERROR_MESSAGE, transaction, apiReference);
-        }
-
+        // Calculateing new average based on trade type and updating in portfolio collection.
         let new_average = (portfolioResult[0].average_price * portfolioResult[0].current_quantity  - shares_worth_change) / shares_change;
         await mongo.update(apiReference, constants.mongoCollections.PORTFOLIOS, { "_id": security_code },
             { average_price: new_average , current_quantity: shares_change }, true);
@@ -247,6 +260,7 @@ async function returns(req, res) {
 
         let fetchObj = { is_deleted: 0 };
 
+        // If returns for a specific security id required.
         if (security_code) {
             fetchObj["_id"] = new ObjectID(security_code.toString().trim());
         }
@@ -286,6 +300,7 @@ async function updateTrade(req, res) {
 
         fetchObj["_id"] = new ObjectID(transaction_code.toString().trim());
 
+        // Checking of that trade exists or not.
         let trade_history = await mongo.find(apiReference, constants.mongoCollections.TRADE_HISTORY, fetchObj, 1, 0);
 
         if(_.isEmpty(trade_history)){
@@ -296,6 +311,7 @@ async function updateTrade(req, res) {
             security_code = trade_history[0].security_code;
         }
 
+        // checking of portfolio exists or not
         let portfolioResult = await mongo.find(apiReference, constants.mongoCollections.PORTFOLIOS, { "_id" : new ObjectID(security_code.toString().trim()), "is_deleted" : 0 }, 1, 0);
 
         if(!portfolioResult.length){
@@ -308,6 +324,7 @@ async function updateTrade(req, res) {
 
         let setObj = { };
 
+        // Calculating and setting variablel according to trade type
         if(trade_type == constants.TRADE_TYPE.BUY){
             setObj.new_average_price = ((amount_before_transaction * quantity_before_transaction) + (quantity * stock_price)) / (quantity_before_transaction + quantity);
             setObj.new_quantity= quantity_before_transaction + quantity;

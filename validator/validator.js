@@ -116,6 +116,14 @@ function updateTrade(req, res, next) {
     }
 }
 
+/**
+ * 
+ * @param {JSON} request payload recieved 
+ * @param {*} res 
+ * @param {JOI Schema} Schema against which we want to validate out request 
+ * @param {*} apiReference 
+ * @returns 
+ */
 function validateFields(req, res, schema, apiReference) {
     var validation = Joi.validate(req, schema);
     if (validation.error) {

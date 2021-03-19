@@ -10,8 +10,8 @@ const database                                    = require('./../database');
 exports.initialize                                = initialize;
 
 async function initialize() {
-  await database.initialize();
-  await initializeServer(app.get('port'));
+  await database.initialize();                              // Initializing databases
+  await initializeServer(app.get('port'));                  // Initializing server on port set on app.js file
 }
 
 function initializeServer(port) {
